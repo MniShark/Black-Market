@@ -1,0 +1,15 @@
+C:\Users\MniShark\Downloads\黑市\bin\Release\net9.0\黑市.deps.json
+C:\Users\MniShark\Downloads\黑市\bin\Release\net9.0\黑市.dll
+C:\Users\MniShark\Downloads\黑市\bin\Release\net9.0\黑市.pdb
+C:\Users\MniShark\Downloads\黑市\obj\Release\net9.0\黑市.csproj.AssemblyReference.cache
+C:\Users\MniShark\Downloads\黑市\obj\Release\net9.0\黑市.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\MniShark\Downloads\黑市\obj\Release\net9.0\黑市.AssemblyInfoInputs.cache
+C:\Users\MniShark\Downloads\黑市\obj\Release\net9.0\黑市.AssemblyInfo.cs
+C:\Users\MniShark\Downloads\黑市\obj\Release\net9.0\黑市.csproj.CoreCompileInputs.cache
+C:\Users\MniShark\Downloads\黑市\obj\Release\net9.0\黑市.dll
+C:\Users\MniShark\Downloads\黑市\obj\Release\net9.0\refint\黑市.dll
+C:\Users\MniShark\Downloads\黑市\obj\Release\net9.0\黑市.pdb
+C:\Users\MniShark\Downloads\黑市\obj\Release\net9.0\ref\黑市.dll
+C:\Users\MniShark\Downloads\黑市\bin\Release\net9.0\黑市.dll.config
+C:\Users\MniShark\Downloads\黑市\obj\Release\net9.0\黑市.csproj.SuggestedBindingRedirects.cache
+C:\Users\MniShark\Downloads\黑市\obj\Release\net9.0\黑市.dll.config
