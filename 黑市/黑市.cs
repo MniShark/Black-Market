@@ -34,7 +34,7 @@ namespace 黑市
         public override string Name => "黑市";
         public override string Author => "Mni Shark";
         public override string Description => "兑换、购买、余额查询、NPC掉落、盲盒、职业、任务";
-        public override Version Version => new Version(1, 2, 0);
+        public override Version Version => new Version(1, 2, 2);
 
         public static 黑市 黑市插件;
 
@@ -512,43 +512,92 @@ namespace 黑市
 
         private void 给予奖励(TSPlayer 玩家, 商品 商品, int 数量, int 总价)
         {
-            if (商品.盲盒.Count > 0)
+            // 数量为0时不给予物品
+            if (商品.数量 > 0)
             {
-                var 总权重 = 商品.盲盒.Sum(r => r.权重);
-                if (总权重 <= 0) { 发送错误(玩家, "盲盒权重错误。"); return; }
-                for (int i = 0; i < 数量; i++)
+                if (商品.盲盒.Count > 0)
                 {
-                    int 抽 = _随机.Next(总权重);
-                    int 累加 = 0;
-                    foreach (var 奖励 in 商品.盲盒)
+                    var 总权重 = 商品.盲盒.Sum(r => r.权重);
+                    if (总权重 <= 0) { 发送错误(玩家, "盲盒权重错误。"); return; }
+                    for (int i = 0; i < 数量; i++)
                     {
-                        累加 += 奖励.权重;
-                        if (抽 < 累加) { 玩家.GiveItem(奖励.物品, 奖励.数量); break; }
+                        int 抽 = _随机.Next(总权重);
+                        int 累加 = 0;
+                        foreach (var 奖励 in 商品.盲盒)
+                        {
+                            累加 += 奖励.权重;
+                            if (抽 < 累加) { 玩家.GiveItem(奖励.物品, 奖励.数量); break; }
+                        }
                     }
+                    if (_配置.购买聊天栏文本)
+                        玩家.SendMessage($"[c/00FF00:成功购买 {数量} 个盲盒，花费 {总价} 个{商品.货币}。]", Color.White);
+                    if (_配置.购买浮动文本)
+                        发送浮动文字(玩家, $"已购买 盲盒×{数量}", Color.Green);
                 }
-                if (_配置.购买聊天栏文本)
-                    玩家.SendMessage($"[c/00FF00:成功购买 {数量} 个盲盒，花费 {总价} 个{商品.货币}。]", Color.White);
-                if (_配置.购买浮动文本)
-                    发送浮动文字(玩家, $"已购买 盲盒×{数量}", Color.Green);
+                else
+                {
+                    玩家.GiveItem(商品.物品, 商品.数量 * 数量, 商品.前缀);
+                    int 剩余 = _货币数据.获取余额(玩家.Name, 商品.货币);
+                    if (_配置.购买聊天栏文本)
+                        玩家.SendMessage($"[c/00FF00:购买成功，花费 {总价}{商品.货币} 还剩余 {剩余}{商品.货币}。]", Color.White);
+                    if (_配置.购买浮动文本)
+                        发送浮动文字(玩家, $"已购买 {商品.名称}×{数量}", Color.Green);
+                }
             }
             else
             {
-                玩家.GiveItem(商品.物品, 商品.数量 * 数量, 商品.前缀);
-                int 剩余 = _货币数据.获取余额(玩家.Name, 商品.货币);
+                // 数量为0，只执行指令，不给物品
                 if (_配置.购买聊天栏文本)
-                    玩家.SendMessage($"[c/00FF00:购买成功，花费 {总价}{商品.货币} 还剩余 {剩余}{商品.货币}。]", Color.White);
+                    玩家.SendMessage($"[c/00FF00:已执行指令，花费 {总价}{商品.货币}。]", Color.White);
                 if (_配置.购买浮动文本)
-                    发送浮动文字(玩家, $"已购买 {商品.名称}×{数量}", Color.Green);
+                    发送浮动文字(玩家, $"指令已执行", Color.Green);
             }
 
+            // 指令执行：绕过权限检查，让玩家可以无视权限使用命令
             if (商品.指令.Count > 0)
             {
                 foreach (var 指令 in 商品.指令)
                 {
                     string 处理 = 指令.Replace("{0}", 玩家.Name).Replace("{}", 玩家.Name);
                     if (!处理.StartsWith("/")) 处理 = "/" + 处理;
-                    Commands.HandleCommand(TSPlayer.Server, 处理);
+                    
+                    // 临时赋予超级管理员权限执行指令，绕过所有权限检查
+                    执行指令无视权限(玩家, 处理);
                 }
+            }
+        }
+
+        /// <summary>
+        /// 以超级管理员权限执行指令，绕过所有权限检查
+        /// </summary>
+        private void 执行指令无视权限(TSPlayer 玩家, string 指令)
+        {
+            // 保存原始权限组
+            string 原始组 = 玩家.Group.Name;
+            var 超级管理员组 = TShock.Groups.GetGroupByName("superadmin");
+            
+            if (超级管理员组 == null)
+            {
+                // 如果没有superadmin组，回退到服务器执行
+                Commands.HandleCommand(TSPlayer.Server, 指令);
+                return;
+            }
+
+            try
+            {
+                // 临时切换到超级管理员权限组
+                玩家.Group = 超级管理员组;
+                // 执行指令
+                Commands.HandleCommand(玩家, 指令);
+            }
+            finally
+            {
+                // 无论是否成功，都恢复原始权限组
+                var 原组 = TShock.Groups.GetGroupByName(原始组);
+                if (原组 != null)
+                    玩家.Group = 原组;
+                else
+                    玩家.Group = TShock.Groups.GetGroupByName("default") ?? 超级管理员组;
             }
         }
 

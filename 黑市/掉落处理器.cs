@@ -104,6 +104,7 @@ namespace 黑市
 
             int 掉落数 = 规则.掉落数量;
             string 货币名 = 规则.货币名称;
+            string npc名称 = 规则.NPC名称;
             if (掉落数 <= 0 || string.IsNullOrEmpty(货币名))
             {
                 _伤害记录.Remove(npc.whoAmI);
@@ -112,7 +113,6 @@ namespace 黑市
 
             bool 显示浮动 = _掉落配置.击杀浮动文本;
             bool 显示聊天 = _掉落配置.击杀聊天栏文本;
-            string 怪物名称 = npc.FullName;
 
             foreach (int playerId in playerIds)
             {
@@ -122,10 +122,13 @@ namespace 黑市
 
                 _货币Data.增加货币(player.Name, 货币名, 掉落数);
 
+                // 使用配置中的NPC名称，如果没有则使用游戏内名称
+                string 显示名称 = !string.IsNullOrEmpty(npc名称) ? npc名称 : npc.FullName;
+
                 if (显示浮动)
-                    黑市.发送浮动文字(player, $"击杀{怪物名称} 获得{掉落数}{货币名}", Color.Green);
+                    黑市.发送浮动文字(player, $"击杀{显示名称} 获得{掉落数}{货币名}", Color.Green);
                 if (显示聊天 && (掉落数 >= 5 || npc.boss))
-                    player.SendSuccessMessage($"[黑市] 击杀 {怪物名称} 获得 {掉落数} 个{货币名}！");
+                    player.SendSuccessMessage($"[黑市] 击杀 {显示名称} 获得 {掉落数} 个{货币名}！");
 
                 _任务系统?.处理击杀进度(player.Name, npc.netID);
             }

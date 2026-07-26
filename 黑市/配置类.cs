@@ -363,13 +363,16 @@ namespace 黑市
 
                 完整.货币 = !string.IsNullOrEmpty(简写.货币) ? 简写.货币 : (商品模板?.货币 ?? "元宝");
                 完整.价格 = 简写.价格 != 0 ? 简写.价格 : (商品模板?.价格 ?? 1);
-                完整.数量 = 简写.数量 != 0 ? 简写.数量 : (商品模板?.数量 ?? 1);
+                
+                // 修复：数量使用可空类型判断，明确区分"未设置"和"设置为0"
+                完整.数量 = 简写.数量.HasValue ? 简写.数量.Value : (商品模板?.数量 ?? 1);
+                
                 完整.前缀 = 简写.前缀.HasValue ? 简写.前缀.Value : (商品模板?.前缀 ?? 0);
                 完整.进度 = 简写.进度 ?? 商品模板?.进度 ?? new List<string>();
                 完整.职业 = 简写.职业 ?? 商品模板?.职业 ?? new List<string>();
                 完整.指令 = 简写.指令 ?? 商品模板?.指令 ?? new List<string>();
                 完整.盲盒 = 简写.盲盒 ?? 商品模板?.盲盒 ?? new List<盲盒奖励>();
-                完整.冷却 = 简写.冷却 != 0 ? 简写.冷却 : (商品模板?.冷却 ?? 0);
+                完整.冷却 = 简写.冷却.HasValue ? 简写.冷却.Value : (商品模板?.冷却 ?? 0);
 
                 _展开商品列表.Add(完整);
             }
@@ -395,13 +398,13 @@ namespace 黑市
         [JsonProperty("货币")] public string 货币 { get; set; }
         [JsonProperty("价格")] public int 价格 { get; set; }
         [JsonProperty("物品")] public int 物品 { get; set; }
-        [JsonProperty("数量")] public int 数量 { get; set; }
+        [JsonProperty("数量")] public int? 数量 { get; set; }
         [JsonProperty("前缀")] public int? 前缀 { get; set; }
         [JsonProperty("进度")] public List<string> 进度 { get; set; }
         [JsonProperty("职业")] public List<string> 职业 { get; set; }
         [JsonProperty("指令")] public List<string> 指令 { get; set; }
         [JsonProperty("盲盒")] public List<盲盒奖励> 盲盒 { get; set; }
-        [JsonProperty("冷却")] public int 冷却 { get; set; }
+        [JsonProperty("冷却")] public int? 冷却 { get; set; }
     }
 
     public class 兑换规则

@@ -157,12 +157,9 @@ namespace 黑市
                 可转职 = false,
                 转职奖励物品 = new List<转职奖励物品>
                 {
-                    new 转职奖励物品 { 物品ID = 113, 数量 = 1 }
+                    new 转职奖励物品 { 物品ID = 3069, 数量 = 1 }
                 },
-                转职执行指令 = new List<string>
-                {
-                    "buff {0} 6 3600"
-                }
+                转职执行指令 = new List<string>()
             });
             默认.职业列表.Add(new 职业定义
             {
@@ -179,7 +176,10 @@ namespace 黑市
                 描述 = "擅长召唤仆从。",
                 颜色 = "FF88FF",
                 可转职 = false,
-                转职奖励物品 = new List<转职奖励物品>(),
+                转职奖励物品 = new List<转职奖励物品>
+                {
+                    new 转职奖励物品 { 物品ID = 5114, 数量 = 1 }
+                },
                 转职执行指令 = new List<string>()
             });
             return 默认;
