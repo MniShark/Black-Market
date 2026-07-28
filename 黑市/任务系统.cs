@@ -17,9 +17,9 @@ namespace 黑市
         private 职业系统 _职业系统;
         private ReaderWriterLockSlim _配置锁 = new ReaderWriterLockSlim();
 
-        /// <summary>
-        /// 初始加载时的错误报告
-        /// </summary>
+        private int _更新计数器 = 0;
+        private const int 更新间隔 = 60;
+
         public string 加载报告 { get; private set; } = "";
 
         public 任务系统(货币数据 货币数据, 职业系统 职业系统)
@@ -31,17 +31,16 @@ namespace 黑市
             if (!string.IsNullOrEmpty(报告))
                 TShock.Log.Warn($"[黑市-任务] {报告}");
             GeneralHooks.ReloadEvent += OnReload;
+            ServerApi.Hooks.GameUpdate.Register(黑市.黑市插件, OnGameUpdate);
         }
 
         public void 卸载()
         {
             GeneralHooks.ReloadEvent -= OnReload;
+            ServerApi.Hooks.GameUpdate.Deregister(黑市.黑市插件, OnGameUpdate);
             _配置锁.Dispose();
         }
 
-        /// <summary>
-        /// 重载配置，返回错误报告（空字符串表示无错误）
-        /// </summary>
         public string 重载配置()
         {
             var 新配置 = 任务配置.加载(out string 报告);
@@ -60,13 +59,73 @@ namespace 黑市
                 args.Player?.SendSuccessMessage("[黑市] 任务配置已重载！");
         }
 
+        private void OnGameUpdate(EventArgs args)
+        {
+            _更新计数器++;
+            if (_更新计数器 < 更新间隔) return;
+            _更新计数器 = 0;
+            处理获取进度();
+        }
+
+        private void 处理获取进度()
+        {
+            _配置锁.EnterReadLock();
+            try
+            {
+                foreach (var player in TShock.Players)
+                {
+                    if (player == null || !player.RealPlayer || !player.Active) continue;
+
+                    var 进行中任务 = _货币数据.获取玩家进行中任务(player.Name);
+                    foreach (var (序号, 当前进度) in 进行中任务)
+                    {
+                        var 任务 = _配置.获取任务(序号);
+                        if (任务 == null || 任务.任务类型 != 任务类型.获取物品) continue;
+
+                        int 持有数量 = 计算背包物品数量(player, 任务.目标ID);
+
+                        if (持有数量 > 当前进度)
+                        {
+                            int 新进度 = Math.Min(持有数量, 任务.目标数量);
+                            if (新进度 >= 任务.目标数量)
+                            {
+                                _货币数据.设置任务状态(player.Name, 序号, 任务状态.已完成, 任务.目标数量);
+                                if (_配置.任务完成聊天栏文本)
+                                    player.SendSuccessMessage($"[任务] 「{任务.名称}」已完成！使用 /提交 {序号} 领取奖励。");
+                                if (_配置.任务完成浮动文本)
+                                    黑市.发送浮动文字(player, $"任务完成：{任务.名称}", Color.Gold);
+                            }
+                            else
+                            {
+                                _货币数据.设置任务状态(player.Name, 序号, 任务状态.进行中, 新进度);
+                            }
+                        }
+                    }
+                }
+            }
+            finally { _配置锁.ExitReadLock(); }
+        }
+
+        private int 计算背包物品数量(TSPlayer player, int 物品ID)
+        {
+            int 数量 = 0;
+            int 最大槽位 = Math.Min(50, player.TPlayer.inventory.Length);
+            for (int i = 0; i < 最大槽位; i++)
+            {
+                var item = player.TPlayer.inventory[i];
+                if (item != null && !item.IsAir && item.type == 物品ID)
+                    数量 += item.stack;
+            }
+            return 数量;
+        }
+
         public string 获取任务列表信息(string 玩家名)
         {
             _配置锁.EnterReadLock();
             try
             {
                 var 消息 = new List<string> { $"[c/FFD700:任务列表 (最多接取 {_配置.最大接取数量} 个)：]" };
-                foreach (var 任务 in _配置.任务列表)
+                foreach (var 任务 in _配置.任务完整列表)
                 {
                     var 状态 = _货币数据.获取任务状态(玩家名, 任务.序号);
                     string 标记;
@@ -96,14 +155,28 @@ namespace 黑市
                             break;
                     }
 
+                    string 类型标记 = 任务.任务类型 == 任务类型.获取物品 ? "[c/87CEEB:收集]" : "[c/FF5555:击杀]";
                     string 限制信息 = "";
                     if (!string.IsNullOrEmpty(任务.进度条件))
                         限制信息 += $" [c/808080:进度:{任务.进度条件}]";
                     if (任务.允许职业.Count > 0)
                         限制信息 += $" [c/FFA500:职业:{string.Join("/", 任务.允许职业)}]";
 
-                    消息.Add($"{标记} [c/87CEEB:<{任务.序号}> {任务.名称}] [c/AAAAAA:{状态文本}]{限制信息}");
-                    消息.Add($"   [c/AAAAAA:{任务.描述}]");
+                    string 奖励信息 = "";
+                    if (任务.货币奖励 != null && 任务.货币奖励.Count > 0)
+                        奖励信息 += $" [c/FFD700:货币:{string.Join(",", 任务.货币奖励.Select(r => $"{r.数量}{r.货币名}"))}]";
+                    if (任务.物品奖励 != null && 任务.物品奖励.Count > 0)
+                    {
+                        var 物品列表 = 任务.物品奖励.Select(r =>
+                        {
+                            try { return $"{Lang.GetItemName(r.物品ID).ToString()}×{r.数量}"; }
+                            catch { return $"物品{r.物品ID}×{r.数量}"; }
+                        });
+                        奖励信息 += $" [c/87CEEB:物品:{string.Join(",", 物品列表)}]";
+                    }
+
+                    消息.Add($"{标记} {类型标记} [c/87CEEB:<{任务.序号}> {任务.名称}] [c/AAAAAA:{状态文本}]{限制信息}");
+                    消息.Add($"   [c/AAAAAA:{任务.描述}]{奖励信息}");
                 }
                 消息.Add("[c/AAAAAA:使用 /接取 <序号> 接取任务，/提交 <序号> 提交已完成任务，/放弃 <序号> 放弃任务。]");
                 return string.Join("\n", 消息);
@@ -130,7 +203,6 @@ namespace 黑市
                     return false;
                 }
 
-                // 检查最大接取数量
                 int 已接取数量 = _货币数据.获取玩家已接取任务数量(player.Name);
                 if (已接取数量 >= _配置.最大接取数量)
                 {
@@ -209,7 +281,15 @@ namespace 黑市
                     return false;
                 }
 
-                // 发放货币奖励
+                if (任务.物品奖励 != null && 任务.物品奖励.Count > 0)
+                {
+                    if (!检查背包空间(player, 任务.物品奖励))
+                    {
+                        结果 = "背包空间不足，无法领取奖励！请清理背包后重试。";
+                        return false;
+                    }
+                }
+
                 if (任务.货币奖励 != null && 任务.货币奖励.Count > 0)
                 {
                     foreach (var 奖励 in 任务.货币奖励)
@@ -219,7 +299,16 @@ namespace 黑市
                     }
                 }
 
-                // 执行指令
+                if (任务.物品奖励 != null && 任务.物品奖励.Count > 0)
+                {
+                    foreach (var 奖励 in 任务.物品奖励)
+                    {
+                        player.GiveItem(奖励.物品ID, 奖励.数量, 奖励.前缀);
+                        string 物品名 = Lang.GetItemName(奖励.物品ID).ToString();
+                        player.SendSuccessMessage($"[任务] 获得 {物品名}×{奖励.数量}。");
+                    }
+                }
+
                 if (任务.执行指令 != null && 任务.执行指令.Count > 0)
                 {
                     foreach (var 指令 in 任务.执行指令)
@@ -237,6 +326,58 @@ namespace 黑市
             finally { _配置锁.ExitReadLock(); }
         }
 
+        private bool 检查背包空间(TSPlayer player, List<任务物品奖励> 物品奖励)
+        {
+            var 槽位类型 = new List<int>();
+            var 槽位剩余 = new List<int>();
+            int 空槽数 = 0;
+
+            int 背包槽位数 = Math.Min(50, player.TPlayer.inventory.Length);
+            for (int i = 0; i < 背包槽位数; i++)
+            {
+                var item = player.TPlayer.inventory[i];
+                if (item == null || item.IsAir)
+                {
+                    空槽数++;
+                    槽位类型.Add(0);
+                    槽位剩余.Add(0);
+                }
+                else
+                {
+                    槽位类型.Add(item.type);
+                    槽位剩余.Add(item.maxStack - item.stack);
+                }
+            }
+
+            foreach (var 奖励 in 物品奖励)
+            {
+                var tempItem = new Item();
+                tempItem.SetDefaults(奖励.物品ID);
+                int 单组最大 = tempItem.maxStack;
+                int 剩余 = 奖励.数量;
+
+                for (int i = 0; i < 背包槽位数 && 剩余 > 0; i++)
+                {
+                    if (槽位类型[i] == 奖励.物品ID && 槽位剩余[i] > 0)
+                    {
+                        int 放入 = Math.Min(剩余, 槽位剩余[i]);
+                        槽位剩余[i] -= 放入;
+                        剩余 -= 放入;
+                    }
+                }
+
+                while (剩余 > 0 && 空槽数 > 0)
+                {
+                    int 放入 = Math.Min(剩余, 单组最大);
+                    剩余 -= 放入;
+                    空槽数--;
+                }
+
+                if (剩余 > 0) return false;
+            }
+            return true;
+        }
+
         public void 处理击杀进度(string 玩家名, int npcID)
         {
             _配置锁.EnterReadLock();
@@ -247,6 +388,7 @@ namespace 黑市
                 {
                     var 任务 = _配置.获取任务(序号);
                     if (任务 == null) continue;
+                    if (任务.任务类型 != 任务类型.击杀) continue;
                     if (任务.目标ID != npcID) continue;
 
                     int 新进度 = 进度 + 1;
@@ -256,8 +398,10 @@ namespace 黑市
                         var player = TShock.Players.FirstOrDefault(p => p != null && p.Name == 玩家名 && p.RealPlayer);
                         if (player != null)
                         {
-                            player.SendSuccessMessage($"[任务] 「{任务.名称}」已完成！使用 /提交 {序号} 领取奖励。");
-                            黑市.发送浮动文字(player, $"任务完成：{任务.名称}", Color.Gold);
+                            if (_配置.任务完成聊天栏文本)
+                                player.SendSuccessMessage($"[任务] 「{任务.名称}」已完成！使用 /提交 {序号} 领取奖励。");
+                            if (_配置.任务完成浮动文本)
+                                黑市.发送浮动文字(player, $"任务完成：{任务.名称}", Color.Gold);
                         }
                     }
                     else
